@@ -1,0 +1,97 @@
+library(ROCR)
+digdata<-read.csv("C:/Users/apple/Desktop/mydata.csv")
+digdata<-as.data.frame(digdata)  
+head(digdata)
+digdata$subtype <- ifelse(digdata$subtype =="TAV",1,0) 
+attach(digdata)
+str(digdata) 
+pred7 <- prediction(digdata$LCP2, digdata$subtype)
+pred7
+perf7 <- performance(pred7,"tpr","fpr")
+plot(perf7,col="red")
+abline(a=0,b=1,col="blue")
+auc7 <- performance(pred7,"auc")
+auc7
+legend("bottomright",legend=c("PTPRC"),
+       lwd=1,col=c("red"))
+#logistic回归模型
+fit1 <- glm(subtype ~ TYROBP+PTPRC+CD86 + ITGB2+ITGAM+CSF1R+LCP2, family= binomial(link='logit'),
+            data=digdata)
+summary(fit1)
+#ROC曲线
+digdata$predvalue <- predict(fit1,type="response")
+pred8 <- prediction(digdata$predvalue, digdata$subtype)
+perf8 <- performance(pred8,"tpr","fpr")
+plot(perf8,col="red")
+abline(a=0,b=1,col="blue")
+auc8 <- performance(pred8,"auc")
+auc8
+plot(perf1, col="blue")
+plot(perf2, col="khaki", add=TRUE)
+plot(perf3, col="green", add=TRUE)
+plot(perf4, col="brown", add=TRUE)
+plot(perf5, col="purple", add=TRUE)
+plot(perf6, col="pink", add=TRUE)
+plot(perf7, col="gold", add=TRUE)
+plot(perf8, col="red", add=TRUE)
+abline(a=0,b=1,col="gray")
+legend("right",legend=c("CD86+PTPRC","CD86","PTPRC"),
+       lwd=1,col=c("green","blue","red"))
+#第二种方法画ROC
+library(epiDisplay)
+install.packages("epiDisplay")
+logistic.display(fit1)
+lroc(fit1,line.col = "red",lwd=3)
+
+##DCA
+
+library(rmda)
+Data<-read.csv("C:/Users/apple/Desktop/mydata.csv")
+Data<-as.data.frame(Data)  
+head(Data)
+Data$subtype <- ifelse(Data$subtype =="TAV",1,0) 
+attach(Data)
+str(Data)
+A<- decision_curve(subtype~CD86,data= Data,
+                        family = binomial(link ='logit'),
+                        thresholds= seq(0,1, by = 0.01),
+                        confidence.intervals = 0.95,
+                        study.design = 'case-control',
+                        population.prevalence = 0.3)
+B<- decision_curve(subtype~ITGB2,data= Data,
+                        family = binomial(link ='logit'),
+                        thresholds= seq(0,1, by = 0.01),
+                        confidence.intervals = 0.95,
+                        study.design = 'case-control',
+                        population.prevalence = 0.3)
+C<- decision_curve(subtype~ITGAM,data= Data,
+                        family = binomial(link ='logit'),
+                        thresholds= seq(0,1, by = 0.01),
+                        confidence.intervals = 0.95,
+                        study.design = 'case-control',
+                        population.prevalence = 0.3)
+complex<-decision_curve(subtype~TYROBP+PTPRC+CD86 + ITGB2+ITGAM+CSF1R+LCP2,
+                        data = Data,family = binomial(link ='logit'),
+                        thresholds = seq(0,1, by = 0.01),
+                        confidence.intervals= 0.95,
+                        study.design = 'case-control',
+                        population.prevalence= 0.3)
+List<- list(A,B,C,complex)
+plot_decision_curve(List,
+                    curve.names=c('CD86','ITGB2','ITGAM','complex'),
+                    cost.benefit.axis =FALSE,col= c('blue','green','purple','red'),
+                    confidence.intervals=FALSE,
+                    standardize = FALSE,legend.position = c("none"))
+plot_clinical_impact(A,population.size= 1000,
+                     cost.benefit.axis = T,
+                     n.cost.benefits= 8,
+                     col =c('red','blue'),
+                     confidence.intervals= T,
+                     ylim=c(0,1000),
+                     legend.position="none")
+plot_clinical_impact(complex,population.size= 1000,
+                     cost.benefit.axis = T,
+                     n.cost.benefits= 8,col =c('red','blue'),
+                     confidence.intervals=T,
+                     ylim=c(0,1000),
+                     legend.position="none")
