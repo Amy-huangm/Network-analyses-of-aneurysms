@@ -1,0 +1,156 @@
+rm(list = ls())
+#导入差异结果表格
+gene<-read.csv("C:/Users/DELL/Desktop/allDiff.csv",header=T)
+library(clusterProfiler)
+library(org.Hs.eg.db)#人
+library(org.Mm.eg.db)#鼠
+library(enrichplot)
+#注释
+gene = bitr(rownames(allDiff), fromType="SYMBOL", toType="ENTREZID", OrgDb="org.Mm.eg.db")
+## 去重
+gene <- dplyr::distinct(gene,SYMBOL,.keep_all=TRUE)
+
+gene_df <- data.frame(logFC=allDiff$logFC,
+                      SYMBOL =rownames(allDiff))
+gene_df <- merge(gene_df,gene,by="SYMBOL")
+
+## geneList 三部曲
+## 1.获取基因logFC
+geneList <-gene_df$logFC
+## 2.命名
+names(geneList) = gene_df$ENTREZID
+## 3.排序很重要
+geneList= sort(geneList, decreasing = TRUE)
+#GSEA富集分析
+## 第一种方法读入hallmarks gene set，从GSEA官网下载
+hallmarks <- read.gmt("C:/Users/DELL/Desktop/h.all.v2023.1.Hs.entrez.gmt")
+GO<- read.gmt("C:/Users/DELL/Desktop/c5.all.v2023.1.Hs.entrez.gmt")
+#鼠
+hallmarks <- read.gmt("C:/Users/DELL/Desktop/mh.all.v2022.1.Mm.entrez.gmt")
+GO<- read.gmt("C:/Users/DELL/Desktop/m5.all.v2022.1.Mm.entrez.gmt")
+# 需要网络
+ehall <- GSEA(geneList,TERM2GENE =hallmarks)
+ego <- GSEA(geneList,TERM2GENE =GO)
+#第二种方法
+ego <- gseGO(geneList, 'org.Hs.eg.db', keyType = "ENTREZID", ont="all", nPerm = 1000, minGSSize = 10, maxGSSize = 1000, pvalueCutoff=0.05)
+ekk<- gseKEGG(geneList, nPerm = 1000, minGSSize = 10, maxGSSize = 1000, pvalueCutoff=0.05)
+##GO富集分析
+ego <- enrichGO(
+  gene  = gene_df$ENTREZID,
+  keyType = "ENTREZID", 
+  OrgDb   = org.Mm.eg.db,
+  ont     = "all",
+  pAdjustMethod = "BH",
+  pvalueCutoff  = 0.05,
+  qvalueCutoff  = 0.05,
+  readable      = TRUE)
+ego <- enrichKEGG(
+  gene = gene,
+  keyType = "kegg",
+  organism  = 'hsa',
+  pvalueCutoff  = 0.05,
+  pAdjustMethod  = "BH",
+  qvalueCutoff  = 0.05)
+#GSEA富集分析第三种方法
+ego <- gseGO(
+  geneList  = geneList,
+  OrgDb  = org.Hs.eg.db,
+  ont  = "all",
+  nPerm  = 1000,  #置换检验的置换次数
+  minGSSize  = 100,
+  maxGSSize  = 500,
+  pvalueCutoff = 0.05,
+  verbose  = FALSE)
+kk <- gseKEGG(
+  geneList  = geneList,
+  keyType  = 'kegg',
+  organism = 'hsa',
+  nPerm  = 1000,
+  minGSSize = 10,
+  maxGSSize = 500,
+  pvalueCutoff = 0.05,
+  pAdjustMethod     = "BH")
+#画图
+#条形图
+barplot(ego, showCategory = 10)
+#气泡图
+dotplot(ehall, showCategory = 20)
+#桥图
+ridgeplot(ehall,20,fill="pvalue") #输出前十个结果
+ridgeplot(ego,30,fill="pvalue") #输出前十个结果
+#GSEA图
+gseaplot2(ehall, geneSetID =5, title = ehall$Description[5])
+gseaplot2(ego, geneSetID =1027, title = ego$Description[1027])
+gseaplot2(ehall, 26:27, pvalue_table = TRUE)
+#导出富集结果表格
+a<-as.data.frame(ehall)
+b<-as.data.frame(ego)
+write.csv(a, "C:/Users/DELL/Desktop/sample.csv",col.names=TRUE, row.names=TRUE, append=FALSE)
+write.csv(b, "C:/Users/DELL/Desktop/GSEA GO.csv",col.names=TRUE, row.names=TRUE, append=FALSE)
+write.csv(alldiff, "C:/Users/DELL/Desktop/alldiff.csv",col.names=TRUE, row.names=TRUE, append=FALSE)
+write.csv(exprSet, "C:/Users/DELL/Desktop/exprSet.csv",col.names=TRUE, row.names=TRUE, append=FALSE)
+
+##GSVA
+if (!require("BiocManager", quietly = TRUE))
+  install.packages("BiocManager")
+
+BiocManager::install("GSVA")
+xrm(list=ls())
+suppressMessages(library(GSVA))
+suppressMessages(library(GSVAdata))
+suppressMessages(library(GSEABase))
+suppressMessages(library(limma))
+#导入表达谱矩阵
+exprSet<-read.csv("C:/Users/DELL/Desktop/exprSet.csv",header=T)
+row.names(exprSet)=exprSet[,1]
+exp<-exprSet[,-2]
+exp<-exprSet[,c(1:12)]
+exp<-as.matrix(exp)
+#导入基因集，来源GSEA官网
+GOset<- getGmt("C:/Users/DELL/Desktop/m5.all.v2022.1.Mm.symbols.gmt")
+
+HALLset<- getGmt("C:/Users/DELL/Desktop/mh.all.v2022.1.Mm.symbols.gmt")
+#GSVA
+GSVAGO<-gsva(exp, GOset, min.sz=5, max.sz=500, mx.diff=TRUE, verbose=FALSE, parallel.sz=1)
+GSVAHALL<-gsva(exp, HALLset, min.sz=5, max.sz=500, mx.diff=TRUE, verbose=FALSE, parallel.sz=1)
+#limma差异分析
+group <- new_median
+## 因子化
+group <- factor(group)
+## 分组矩阵
+design <- model.matrix(~0 + group)
+## 分组矩阵命名
+colnames(design) <- levels(group)
+design
+## 比较矩阵，其中treat - con根据自己的组别更改
+contrast.matrix <- makeContrasts(High - Low, levels=design)
+contrast.matrix
+## 线性拟合
+fit <- lmFit(GSVAHALL, design)
+fit2 <- contrasts.fit(fit, contrast.matrix) 
+## 贝叶斯检验
+fit2 <- eBayes(fit2)
+## 提取差异结果，注意这里的coef是1
+allDiff=topTable(fit2,adjust='fdr',coef=1,number=Inf) 
+#筛选
+result<-subset(allDiff,allDiff$P.Value<0.05 & abs(allDiff$logFC) >=1)
+result<-subset(allDiff,allDiff$P.Value<0.05)
+#热图
+library(pheatmap)
+heatdata <- GSVAHALL[rownames(result),]
+##制作一个分组信息用于注释a
+group <- new_median
+annotation_col <- data.frame(group)
+rownames(annotation_col) <- colnames(heatdata)
+pheatmap(heatdata, #热图的数据
+         cluster_rows = TRUE,#行聚类
+         cluster_cols = T,#列聚类，可以看出样本之间的区分度
+         annotation_col =annotation_col, #标注样本分类
+         annotation_legend=TRUE, # 显示注释
+         show_rownames = T,# 显示行名
+         show_colnames = F,# 显示列名
+         scale = "row", #以行来标准化，这个功能很不错
+         color =colorRampPalette(c("blue", "white","red"))(100))
+#导出
+write.csv(mycounts, "C:/Users/DELL/Desktop/exprSet.csv",col.names=TRUE, row.names=TRUE, append=FALSE)
+write.csv(allDiff, "C:/Users/DELL/Desktop/GSVAHALLMARK.csv",col.names=TRUE, row.names=TRUE, append=FALSE)
